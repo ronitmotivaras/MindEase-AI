@@ -1,0 +1,24 @@
+Flask==3.0.0
+flask-cors==4.0.0
+pandas==2.2.0
+numpy==1.26.4
+scikit-learn==1.4.0
+
+# Optional: For enhanced NLP capabilities
+# Uncomment if you want to use these
+# transformers==4.36.0
+# torch==2.1.1
+# nltk==3.8.1
+
+# Optional: For database support
+# Uncomment if you want to use database
+# SQLAlchemy==2.0.23
+# psycopg2-binary==2.9.9
+# pymongo==4.6.0
+
+# Optional: For API integration with Anthropic Claude
+# anthropic==0.8.1
+
+# For testing
+# pytest==7.4.3
+# pytest-flask==1.3.0
