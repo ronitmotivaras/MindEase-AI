@@ -4,69 +4,62 @@ from datetime import datetime
 
 
 class ChatHandler:
-    """Handles natural language chat-based mental health assessment"""
+    """Handles natural language chat-based mental health assessment with 5-level conversation"""
     
     def __init__(self):
-        self.conversation_stage = 'greeting'
         self.symptom_patterns = self._load_symptom_patterns()
-        self.follow_up_questions = self._load_follow_up_questions()
+        self.level_responses = self._load_level_responses()
         self.empathy_responses = self._load_empathy_responses()
+        self.symptom_suggestions = self._load_symptom_suggestions()
     
     def _load_symptom_patterns(self):
         """Load regex patterns for symptom detection"""
         return {
             'sadness': [
-                r'\b(sad|depressed|down|unhappy|miserable|hopeless|empty)\b',
-                r'\b(feeling low|feeling blue)\b',
-                r'\b(crying|tears)\b'
+                r'\b(sad|depressed|down|unhappy|miserable|hopeless|empty|low mood)\b',
+                r'\b(feeling low|feeling blue|no joy|lost interest)\b',
+                r'\b(crying|tears|grief)\b'
             ],
             'anxiety': [
-                r'\b(anxious|worried|nervous|tense|stressed|panic)\b',
-                r'\b(can\'t relax|on edge|restless)\b',
-                r'\b(worry|worrying)\b'
+                r'\b(anxious|worried|nervous|tense|stressed|panic|fear)\b',
+                r'\b(can\'t relax|on edge|restless|uneasy)\b',
+                r'\b(worry|worrying|overthinking)\b'
             ],
             'sleep': [
-                r'\b(can\'t sleep|insomnia|trouble sleeping|sleep problems)\b',
-                r'\b(sleeping too much|oversleeping)\b',
-                r'\b(nightmares|bad dreams)\b'
+                r'\b(can\'t sleep|insomnia|trouble sleeping|sleep problems|sleepless)\b',
+                r'\b(sleeping too much|oversleeping|tired all day)\b',
+                r'\b(nightmares|bad dreams|wake up)\b'
             ],
             'energy': [
-                r'\b(tired|fatigue|exhausted|no energy|drained)\b',
-                r'\b(can\'t get out of bed|too tired)\b'
+                r'\b(tired|fatigue|exhausted|no energy|drained|weak)\b',
+                r'\b(can\'t get out of bed|too tired|lethargic)\b'
             ],
             'concentration': [
                 r'\b(can\'t focus|can\'t concentrate|distracted|unfocused)\b',
-                r'\b(trouble thinking|mind racing|foggy)\b'
+                r'\b(trouble thinking|mind racing|foggy|confused)\b',
+                r'\b(forgetful|memory)\b'
             ],
             'social': [
-                r'\b(avoid people|avoiding social|don\'t want to see anyone)\b',
-                r'\b(isolated|alone|lonely)\b',
-                r'\b(scared of people|fear of judgment|embarrassed)\b'
+                r'\b(avoid people|avoiding|don\'t want to see anyone|isolated)\b',
+                r'\b(alone|lonely|withdrawn)\b',
+                r'\b(scared of people|judgment|embarrassed)\b'
             ],
             'panic': [
-                r'\b(panic attack|heart racing|palpitations)\b',
-                r'\b(can\'t breathe|shortness of breath|chest pain)\b',
+                r'\b(panic|heart racing|palpitations)\b',
+                r'\b(can\'t breathe|shortness of breath|chest)\b',
                 r'\b(sudden fear|intense fear)\b'
             ],
-            'trauma': [
-                r'\b(trauma|traumatic|ptsd|flashback)\b',
-                r'\b(triggered|reminders of)\b'
-            ],
-            'obsessive': [
-                r'\b(obsessive thoughts|can\'t stop thinking|intrusive thoughts)\b',
-                r'\b(checking|ritual|compulsive|repeatedly)\b'
+            'appetite': [
+                r'\b(no appetite|not eating|lost weight|overeating)\b',
+                r'\b(eating too much|weight gain|binge)\b'
             ],
             'mood_swings': [
-                r'\b(mood swings|ups and downs|manic|euphoric)\b',
-                r'\b(really high energy|don\'t need sleep)\b'
-            ],
-            'impulsivity': [
-                r'\b(impulsive|reckless|risky behavior)\b',
-                r'\b(can\'t sit still|hyperactive|fidget)\b'
+                r'\b(mood swings|ups and downs|irritable|angry)\b',
+                r'\b(emotional|crying easily|outbursts)\b'
             ],
             'worthlessness': [
-                r'\b(worthless|useless|failure|burden)\b',
-                r'\b(hate myself|guilty)\b'
+                r'\b(worthless|useless|failure|burden|guilty)\b',
+                r'\b(hate myself|self-blame|shame)\b'
             ],
             'suicidal': [
                 r'\b(suicide|suicidal|kill myself|end my life|want to die)\b',
@@ -74,74 +67,120 @@ class ChatHandler:
             ]
         }
     
-    def _load_follow_up_questions(self):
-        """Load follow-up questions based on detected symptoms"""
+    def _load_symptom_suggestions(self):
+        """Suggestions based on detected symptoms - from dataset patterns"""
         return {
-            'sadness': [
-                "I hear that you're feeling down. How long have you been feeling this way?",
-                "That sounds really difficult. Have you noticed if anything in particular triggers these sad feelings?",
-                "Thank you for sharing. Have you lost interest in activities you used to enjoy?"
+            'sadness': {
+                'related': ['loss of interest', 'hopelessness', 'low energy', 'sleep changes'],
+                'question': "People experiencing sadness often also feel a loss of interest in activities they used to enjoy. Have you noticed this?"
+            },
+            'anxiety': {
+                'related': ['restlessness', 'difficulty relaxing', 'excessive worry', 'nervousness'],
+                'question': "Anxiety often comes with physical symptoms like restlessness or difficulty relaxing. Do you experience these?"
+            },
+            'sleep': {
+                'related': ['fatigue', 'difficulty concentrating', 'irritability', 'low energy'],
+                'question': "Sleep problems often affect daytime energy and concentration. How has this been impacting your daily life?"
+            },
+            'energy': {
+                'related': ['fatigue', 'difficulty with daily tasks', 'loss of motivation', 'physical weakness'],
+                'question': "Low energy often makes daily tasks feel overwhelming. Are you finding it hard to complete normal activities?"
+            },
+            'concentration': {
+                'related': ['poor memory', 'difficulty making decisions', 'mental fog', 'easily distracted'],
+                'question': "Concentration issues often affect decision-making and memory. Have you noticed these patterns?"
+            },
+            'social': {
+                'related': ['loneliness', 'fear of judgment', 'avoiding interaction', 'low confidence'],
+                'question': "Social avoidance often comes with fear of judgment or low confidence. Do these resonate with you?"
+            },
+            'panic': {
+                'related': ['rapid heartbeat', 'sweating', 'trembling', 'fear of losing control'],
+                'question': "Panic symptoms often include physical sensations like rapid heartbeat or sweating. Do you experience these?"
+            },
+            'appetite': {
+                'related': ['weight changes', 'emotional eating', 'loss of taste', 'irregular meals'],
+                'question': "Appetite changes often lead to weight fluctuations. Have you noticed changes in your weight?"
+            },
+            'mood_swings': {
+                'related': ['irritability', 'emotional outbursts', 'unpredictable moods', 'impulsive behavior'],
+                'question': "Mood swings can sometimes lead to impulsive decisions or emotional outbursts. Is this familiar to you?"
+            },
+            'worthlessness': {
+                'related': ['guilt', 'self-criticism', 'feeling like a burden', 'low self-esteem'],
+                'question': "Feelings of worthlessness often come with excessive guilt or self-criticism. Do you relate to this?"
+            }
+        }
+    
+    def _load_level_responses(self):
+        """Load responses for each of the 5 conversation levels"""
+        return {
+            1: [
+                "Thank you for sharing. To understand better, could you tell me about your sleep patterns lately? Any trouble falling asleep or staying asleep?",
+                "I appreciate you opening up. How has your sleep been? This often tells us a lot about mental wellbeing.",
+                "Thank you. Let's start by understanding your daily patterns - how well have you been sleeping recently?"
             ],
-            'anxiety': [
-                "It sounds like you're experiencing a lot of worry. Can you tell me more about what you're anxious about?",
-                "I understand anxiety can be overwhelming. Do you notice physical symptoms when you feel anxious, like a racing heart or sweating?",
-                "Does this anxiety happen in specific situations, or is it more constant throughout the day?"
+            2: [
+                "I see. Now, how about your appetite and energy levels? Have you noticed any changes there?",
+                "Thank you. Are you experiencing any changes in appetite or feeling more tired than usual?",
+                "Understood. Have you noticed any shifts in your eating habits or overall energy throughout the day?"
             ],
-            'sleep': [
-                "Sleep problems can really affect how we feel. How many hours are you sleeping on average?",
-                "Is it more difficult falling asleep, staying asleep, or both?",
-                "Have these sleep issues been affecting your daily functioning?"
+            3: [
+                "That's helpful. Have you had difficulty concentrating or making decisions lately?",
+                "Thank you for sharing. How has your concentration been? Any trouble focusing on tasks?",
+                "I appreciate that. Do you find yourself easily distracted or having memory issues?"
             ],
-            'social': [
-                "Social situations can be challenging. What specifically makes you want to avoid them?",
-                "How do you feel before, during, and after social interactions?",
-                "Has avoiding social situations been affecting your relationships or work?"
+            4: [
+                "I'm getting a clearer picture. {suggestion}",
+                "Thank you for being open. {suggestion}",
+                "This helps a lot. {suggestion}"
             ],
-            'panic': [
-                "Panic attacks can be very frightening. How often do these episodes occur?",
-                "What physical symptoms do you experience during these episodes?",
-                "Do you worry about having another panic attack?"
-            ],
-            'suicidal': [
-                "I'm really concerned about what you've shared. Are you having thoughts of harming yourself right now?",
-                "Your safety is the most important thing. Do you have a plan or means to hurt yourself?",
-                "Have you told anyone else about these thoughts?"
+            5: [
+                "I now have a comprehensive understanding of your symptoms. I'm ready to provide your personalized assessment with specific recommendations.",
+                "Thank you for sharing all of this. I have enough information to generate your detailed mental health assessment.",
+                "I appreciate your openness throughout our conversation. Your assessment with personalized insights is ready."
             ]
         }
     
     def _load_empathy_responses(self):
         """Load empathetic response templates"""
         return [
-            "Thank you for sharing that with me. It takes courage to talk about these things.",
-            "I hear you, and what you're experiencing sounds really challenging.",
-            "That must be very difficult to deal with. I appreciate you opening up.",
-            "I understand this isn't easy to talk about. You're doing the right thing by seeking help.",
-            "What you're feeling is valid, and I'm here to help you work through this."
+            "I hear you.",
+            "Thank you for trusting me with this.",
+            "That sounds challenging.",
+            "I understand.",
+            "I appreciate you sharing."
         ]
     
     def get_welcome_message(self):
         """Get initial welcome message"""
         return {
-            'message': "Hello! I'm here to help you assess your mental health. This is a safe space where you can share what you're experiencing. Feel free to describe your symptoms, feelings, or concerns in your own words. What brings you here today?",
-            'type': 'greeting'
+            'message': "Hello! I'm MindEase AI. I'll ask you a few questions to understand your mental health better. Please answer honestly - your responses help me provide accurate insights. What symptoms or feelings have been bothering you lately?",
+            'type': 'greeting',
+            'level': 1
         }
     
     def process_message(self, user_message, chat_history):
-        """Process user message and generate response"""
-        # Detect symptoms in message
+        """Process user message and generate level-based response"""
         symptoms_detected = self._detect_symptoms(user_message)
         
-        # Check for crisis situation
         if self._is_crisis(symptoms_detected):
             return self._generate_crisis_response(), symptoms_detected
         
-        # Generate empathetic response
-        response = self._generate_response(user_message, symptoms_detected, chat_history)
+        user_messages = [msg for msg in chat_history if msg['role'] == 'user']
+        level = min(len(user_messages) + 1, 5)
+        
+        all_symptoms = set(symptoms_detected)
+        for msg in chat_history:
+            if msg['role'] == 'user':
+                all_symptoms.update(self._detect_symptoms(msg['message']))
+        
+        response = self._generate_level_response(level, list(all_symptoms), symptoms_detected)
         
         return response, symptoms_detected
     
     def _detect_symptoms(self, text):
-        """Detect symptoms in user message using pattern matching"""
+        """Detect symptoms in user message"""
         text_lower = text.lower()
         detected = []
         
@@ -149,89 +188,78 @@ class ChatHandler:
             for pattern in patterns:
                 if re.search(pattern, text_lower):
                     detected.append(symptom_category)
-                    break  # Only add category once
+                    break
         
         return detected
     
     def _is_crisis(self, symptoms):
-        """Check if message indicates crisis situation"""
+        """Check if message indicates crisis"""
         return 'suicidal' in symptoms
     
     def _generate_crisis_response(self):
-        """Generate immediate crisis response"""
+        """Generate crisis response"""
         return {
-            'message': "I'm very concerned about what you've shared. Your safety is the most important thing right now. Please reach out to a crisis helpline immediately:",
+            'message': "I'm very concerned about what you've shared. Your safety is most important right now. Please reach out immediately:\n\nNational Suicide Prevention Lifeline: 1-800-273-8255 (24/7)\nCrisis Text Line: Text HOME to 741741\nEmergency: 911\n\nYou're not alone, and help is available.",
             'type': 'crisis',
             'crisis_resources': [
-                {
-                    'name': 'National Suicide Prevention Lifeline',
-                    'phone': '1-800-273-8255',
-                    'available': '24/7'
-                },
-                {
-                    'name': 'Crisis Text Line',
-                    'text': 'Text HOME to 741741',
-                    'available': '24/7'
-                },
-                {
-                    'name': 'Emergency',
-                    'phone': '911',
-                    'note': 'For immediate danger'
-                }
-            ],
-            'follow_up': "Would you like to talk about what's making you feel this way? I'm here to listen."
+                {'name': 'National Suicide Prevention Lifeline', 'phone': '1-800-273-8255'},
+                {'name': 'Crisis Text Line', 'text': 'Text HOME to 741741'},
+                {'name': 'Emergency', 'phone': '911'}
+            ]
         }
     
-    def _generate_response(self, user_message, symptoms_detected, chat_history):
-        """Generate appropriate response based on context"""
-        # Start with empathy
+    def _generate_level_response(self, level, all_symptoms, current_symptoms):
+        """Generate response based on conversation level"""
         empathy = random.choice(self.empathy_responses)
         
-        # Determine what to ask about
-        if not symptoms_detected:
-            # No specific symptoms detected, ask open-ended question
+        if level <= 3:
+            level_response = random.choice(self.level_responses[level])
             return {
-                'message': f"{empathy} Can you tell me more about how you've been feeling lately? For example, how has your mood, sleep, and energy level been?",
-                'type': 'clarification'
+                'message': f"{empathy} {level_response}",
+                'type': 'follow_up',
+                'level': level,
+                'detected_symptoms': current_symptoms
             }
         
-        # We detected symptoms, ask follow-up
-        primary_symptom = symptoms_detected[0]  # Focus on first detected
-        
-        if primary_symptom in self.follow_up_questions:
-            follow_up = random.choice(self.follow_up_questions[primary_symptom])
+        elif level == 4:
+            # Level 4: Suggest related symptoms based on what's detected
+            suggestion = "Based on what you've shared, have you also noticed any physical tension, changes in your daily routine, or feeling overwhelmed?"
+            
+            if all_symptoms:
+                primary_symptom = all_symptoms[0]
+                if primary_symptom in self.symptom_suggestions:
+                    suggestion = self.symptom_suggestions[primary_symptom]['question']
+            
+            response_template = random.choice(self.level_responses[4])
+            response = response_template.format(suggestion=suggestion)
             
             return {
-                'message': f"{empathy} {follow_up}",
-                'type': 'follow_up',
-                'detected_symptoms': symptoms_detected
+                'message': f"{empathy} {response}",
+                'type': 'confirmation',
+                'level': level,
+                'detected_symptoms': current_symptoms,
+                'suggested_symptoms': self.symptom_suggestions.get(all_symptoms[0] if all_symptoms else 'sadness', {}).get('related', [])
             }
         
-        # Default response
-        return {
-            'message': f"{empathy} Can you tell me more about what you're experiencing? How long have these symptoms been affecting you?",
-            'type': 'general'
-        }
+        else:
+            # Level 5: Ready for assessment
+            response = random.choice(self.level_responses[5])
+            return {
+                'message': f"{empathy} {response}",
+                'type': 'ready_for_assessment',
+                'level': level,
+                'detected_symptoms': current_symptoms
+            }
     
     def should_end_conversation(self, chat_history, symptoms_detected):
-        """Determine if enough information has been gathered"""
-        # End conversation after sufficient exchanges
+        """Check if 5 questions have been asked"""
         user_messages = [msg for msg in chat_history if msg['role'] == 'user']
-        
-        # Need at least 4-5 exchanges to gather enough info
-        if len(user_messages) >= 5:
-            return True
-        
-        # Or if we've detected symptoms from multiple categories
-        if len(set(symptoms_detected)) >= 4:
-            return True
-        
-        return False
+        return len(user_messages) >= 5
     
     def generate_summary_prompt(self, chat_history):
-        """Generate prompt to ask user if they want analysis"""
+        """Generate summary prompt"""
         return {
-            'message': "Thank you for sharing all of this with me. I've gathered enough information to provide you with an assessment. Would you like me to analyze what we've discussed and give you some insights?",
+            'message': "I have gathered enough information. Type 'show results' to see your comprehensive assessment.",
             'type': 'summary_prompt',
-            'options': ['Yes, show me the assessment', 'I want to share more']
+            'options': ['Show my results', 'I want to share more']
         }

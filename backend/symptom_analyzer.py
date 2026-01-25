@@ -4,6 +4,7 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 import re
 import json
+from ml_model import get_model
 
 
 class SymptomAnalyzer:
@@ -14,6 +15,9 @@ class SymptomAnalyzer:
         self.symptom_keywords = self._build_symptom_keywords()
         self.vectorizer = TfidfVectorizer(ngram_range=(1, 2), max_features=1000)
         self._train_vectorizer()
+        
+        # Initialize ML model
+        self.ml_model = get_model()
     
     def _load_conditions(self):
         """Load mental health conditions database"""
@@ -270,10 +274,16 @@ class SymptomAnalyzer:
         return results
     
     def analyze_chat_symptoms(self, symptoms, chat_history):
-        """Analyze symptoms collected from chat"""
-        condition_scores = {}
+        """Analyze symptoms collected from chat using ML model"""
+        # Extract all user messages for ML analysis
+        user_messages = [msg['message'] for msg in chat_history if msg['role'] == 'user']
+        combined_text = ' '.join(user_messages)
         
-        # Count symptom occurrences
+        # Use ML model for prediction
+        ml_predictions = self.ml_model.predict_conditions(combined_text, top_k=5)
+        
+        # Also use keyword-based analysis for additional coverage
+        condition_scores = {}
         for symptom in symptoms:
             if symptom in self.symptom_keywords:
                 for condition in self.symptom_keywords[symptom]:
@@ -285,20 +295,37 @@ class SymptomAnalyzer:
                     condition_scores[condition]['count'] += 1
                     condition_scores[condition]['symptoms'].append(symptom)
         
-        # Build results
+        # Build combined results from ML model
         results = []
+        seen_conditions = set()
+        
+        # First add ML model predictions
+        for pred in ml_predictions:
+            seen_conditions.add(pred['condition'])
+            
+            # Get description from conditions dict or ML model
+            description = self.ml_model._get_condition_description(pred['condition'])
+            
+            results.append({
+                'condition': pred['condition'],
+                'description': description,
+                'confidence': pred['confidence'],
+                'severity': pred['severity'],
+                'matched_symptoms': pred['matched_symptoms'],
+                'symptom_count': len(pred['matched_symptoms'])
+            })
+        
+        # Add keyword-based results not in ML predictions
         for condition_name, data in condition_scores.items():
-            if condition_name in self.conditions:
+            if condition_name not in seen_conditions and condition_name in self.conditions:
                 condition_info = self.conditions[condition_name]
                 symptom_count = data['count']
                 
-                # Determine severity
                 severity = self._determine_severity(
                     symptom_count, 
                     condition_info['severity_thresholds']
                 )
                 
-                # Calculate confidence
                 total_symptoms = len(condition_info['symptoms'])
                 confidence = min(symptom_count / total_symptoms, 1.0) * 100
                 
@@ -317,8 +344,9 @@ class SymptomAnalyzer:
         return {
             'assessment_date': pd.Timestamp.now().isoformat(),
             'total_symptoms_detected': len(set(symptoms)),
-            'conditions_identified': results,
-            'recommendations': self._generate_recommendations(results)
+            'conditions_identified': results[:5],  # Top 5 conditions
+            'recommendations': self._generate_recommendations(results),
+            'ml_powered': True
         }
     
     def _determine_severity(self, symptom_count, thresholds):
@@ -403,7 +431,14 @@ class SymptomAnalyzer:
         return results
     
     def get_all_conditions(self):
-        """Get list of all conditions"""
+        """Get list of all conditions from ML model dataset"""
+        # Get conditions from ML model (dataset)
+        ml_conditions = self.ml_model.get_all_conditions()
+        
+        if ml_conditions:
+            return ml_conditions
+        
+        # Fallback to hardcoded conditions
         return [
             {
                 'name': name,
@@ -414,6 +449,12 @@ class SymptomAnalyzer:
     
     def get_condition_details(self, condition_name):
         """Get detailed information about a condition"""
+        # Try ML model first
+        ml_info = self.ml_model.get_condition_info(condition_name)
+        if ml_info:
+            return ml_info
+        
+        # Fallback to hardcoded conditions
         if condition_name in self.conditions:
             return {
                 'name': condition_name,
