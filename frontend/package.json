@@ -4,10 +4,12 @@
   "description": "MindEase AI - Chat interface for symptom-based disease diagnosis",
   "private": true,
   "dependencies": {
+    "axios": "^1.6.0",
+    "html2canvas": "^1.4.1",
+    "jspdf": "^4.1.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "react-scripts": "5.0.1",
-    "axios": "^1.6.0"
+    "react-scripts": "5.0.1"
   },
   "scripts": {
     "start": "react-scripts start",
@@ -33,4 +35,3 @@
     ]
   }
 }
-

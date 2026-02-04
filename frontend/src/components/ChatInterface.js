@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
+import jsPDF from "jspdf";
 import { sendMessage } from "../services/api";
 import "./ChatInterface.css";
 
@@ -76,38 +77,6 @@ const ChatInterface = () => {
     return responses[level] || responses[5];
   };
 
-  const formatDiagnosisResponse = (response) => {
-    let formattedText = response.message;
-
-    if (response.detected_symptoms && response.detected_symptoms.length > 0) {
-      formattedText += `\n\n🔍 **Detected Symptoms:**\n${response.detected_symptoms
-        .map((symptom) => `• ${symptom.replace(/_/g, " ")}`)
-        .join("\n")}`;
-    }
-
-    if (response.conditions && response.conditions.length > 0) {
-      formattedText += `\n\n🏥 **Potential Conditions:**`;
-      response.conditions.forEach((condition, index) => {
-        formattedText += `\n\n${index + 1}. **${condition.name}** (${condition.match_percentage}% match)`;
-        formattedText += `\n   📋 ${condition.description}`;
-        if (condition.severity) {
-          formattedText += `\n   ⚠️ Severity: ${condition.severity}`;
-        }
-      });
-    }
-
-    if (response.recommendations && response.recommendations.length > 0) {
-      formattedText += `\n\n💡 **Recommendations:**`;
-      response.recommendations.forEach((rec, index) => {
-        formattedText += `\n${index + 1}. ${rec}`;
-      });
-    }
-
-    formattedText += `\n\n⚠️ **Disclaimer:** This is an AI analysis for informational purposes only. Please consult a qualified mental health professional for proper diagnosis and treatment.`;
-
-    return formattedText;
-  };
-
   const handleGetAssessment = async () => {
     setIsLoading(true);
 
@@ -129,10 +98,9 @@ const ChatInterface = () => {
 
       const diagnosisMessage = {
         id: messages.length + 2,
-        text: formatDiagnosisResponse(diagnosis),
+        text: "I've generated your detailed assessment below.",
         sender: "bot",
         timestamp: new Date(),
-        diagnosisData: diagnosis,
       };
 
       setMessages((prev) => [...prev.slice(0, -1), diagnosisMessage]);
@@ -155,16 +123,6 @@ const ChatInterface = () => {
 
     if (!inputMessage.trim() || isLoading) return;
 
-    const userText = inputMessage.trim().toLowerCase();
-    
-    // Check if user wants results
-    if (userText.includes("show result") || userText.includes("get result") || 
-        userText.includes("send result") || userText.includes("my result")) {
-      setInputMessage("");
-      await handleGetAssessment();
-      return;
-    }
-
     const userMessage = {
       id: messages.length + 1,
       text: inputMessage.trim(),
@@ -184,12 +142,15 @@ const ChatInterface = () => {
     try {
       const response = await sendMessage(currentInput);
 
-      // Update collected symptoms
+      // Update collected symptoms and keep a local copy for follow-up message
+      let updatedSymptoms = collectedSymptoms;
       if (response.detected_symptoms && response.detected_symptoms.length > 0) {
-        setCollectedSymptoms((prev) => {
-          const newSymptoms = [...new Set([...prev, ...response.detected_symptoms])];
-          return newSymptoms;
-        });
+        const allSymptomsSet = new Set([
+          ...collectedSymptoms,
+          ...response.detected_symptoms,
+        ]);
+        updatedSymptoms = Array.from(allSymptomsSet);
+        setCollectedSymptoms(updatedSymptoms);
       }
 
       // Progress conversation level (4-5 questions before results)
@@ -199,10 +160,13 @@ const ChatInterface = () => {
       // Generate appropriate response based on level
       let botMessageText;
       if (newLevel >= 5) {
-        botMessageText = response.message || getLevelBasedResponse(newLevel, collectedSymptoms);
-        botMessageText += "\n\nI now have enough information to provide your assessment. Type 'show results' or click the button below.";
+        botMessageText =
+          response.message || getLevelBasedResponse(newLevel, updatedSymptoms);
+        botMessageText +=
+          "\n\nI now have enough information to provide your assessment. Click the button below to view your detailed results.";
       } else {
-        botMessageText = response.message || getLevelBasedResponse(newLevel, collectedSymptoms);
+        botMessageText =
+          response.message || getLevelBasedResponse(newLevel, updatedSymptoms);
       }
 
       const botMessage = {
@@ -244,117 +208,131 @@ const ChatInterface = () => {
   const downloadPDF = () => {
     if (!assessmentResults) return;
 
-    const content = generatePDFContent(assessmentResults);
-    
-    // Create blob and auto-download
-    const blob = new Blob([content], { type: "text/html" });
-    const url = URL.createObjectURL(blob);
-    
-    // Create download link
-    const link = document.createElement("a");
-    const fileName = `MindEase_Report_${new Date().toISOString().split('T')[0]}.html`;
-    link.href = url;
-    link.download = fileName;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-  };
+    const pdf = new jsPDF("p", "mm", "a4");
+    const pageWidth = pdf.internal.pageSize.getWidth();
+    let y = 20;
 
-  const generatePDFContent = (results) => {
-    const date = new Date().toLocaleDateString("en-US", {
-      weekday: "long",
-      year: "numeric",
-      month: "long",
-      day: "numeric",
-    });
-    const time = new Date().toLocaleTimeString("en-US", {
-      hour: "2-digit",
-      minute: "2-digit",
-    });
+    const addSectionTitle = (title) => {
+      pdf.setFont("helvetica", "bold");
+      pdf.setFontSize(14);
+      pdf.text(title, 15, y);
+      y += 5;
+      pdf.setLineWidth(0.3);
+      pdf.line(15, y, pageWidth - 15, y);
+      y += 7;
+      pdf.setFont("helvetica", "normal");
+      pdf.setFontSize(11);
+    };
 
-    let conditionsHTML = "";
-    if (results.conditions && results.conditions.length > 0) {
-      results.conditions.forEach((c, index) => {
-        conditionsHTML += `
-          <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin-bottom: 15px; border-left: 4px solid #6366f1;">
-            <h3 style="margin: 0 0 10px 0; color: #1f2937; font-size: 18px;">${index + 1}. ${c.name}</h3>
-            <p style="margin: 8px 0; color: #4b5563;"><strong>Match Confidence:</strong> ${c.match_percentage}%</p>
-            <p style="margin: 8px 0; color: #4b5563;"><strong>Severity Level:</strong> ${c.severity || "Not determined"}</p>
-            <p style="margin: 8px 0; color: #6b7280; font-size: 14px;">${c.description}</p>
-          </div>
-        `;
+    const addWrappedText = (text, leftMargin = 15, maxWidth = pageWidth - 30) => {
+      const lines = pdf.splitTextToSize(text, maxWidth);
+      lines.forEach((line) => {
+        if (y > 280) {
+          pdf.addPage();
+          y = 20;
+        }
+        pdf.text(line, leftMargin, y);
+        y += 6;
       });
+      y += 2;
+    };
+
+    // Header - centered highlighted app name
+    pdf.setFont("helvetica", "bold");
+    pdf.setFontSize(22);
+    const title = "MindEase-AI";
+    const titleWidth = pdf.getTextWidth(title);
+    pdf.text(title, (pageWidth - titleWidth) / 2, y);
+    y += 8;
+
+    pdf.setFont("helvetica", "normal");
+    pdf.setFontSize(13);
+    pdf.text("Mental Health Assessment Report", pageWidth / 2, y, { align: "center" });
+    y += 10;
+
+    const generatedAt = new Date();
+    const dateStr = generatedAt.toLocaleDateString();
+    const timeStr = generatedAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    pdf.setFontSize(10);
+    pdf.text(`Generated on ${dateStr} at ${timeStr}`, pageWidth / 2, y, { align: "center" });
+    y += 10;
+
+    pdf.setLineWidth(0.5);
+    pdf.line(15, y, pageWidth - 15, y);
+    y += 10;
+
+    // Summary section (top condition if available)
+    addSectionTitle("Clinical Summary");
+    if (assessmentResults.conditions && assessmentResults.conditions.length > 0) {
+      const primary = assessmentResults.conditions[0];
+      addWrappedText(
+        `Based on the reported symptoms, the most likely mental health concern is "${primary.name}" with an estimated match of ${primary.match_percentage}%.`
+      );
+      if (primary.severity) {
+        addWrappedText(`Overall severity is assessed as: ${primary.severity}.`);
+      }
+      if (primary.description) {
+        addWrappedText(primary.description);
+      }
+    } else {
+      addWrappedText(
+        "No specific mental health condition could be confidently identified from the reported symptoms. This is generally reassuring, but monitoring and self-care are still recommended."
+      );
     }
 
-    let symptomsHTML = "";
-    if (results.detected_symptoms && results.detected_symptoms.length > 0) {
-      results.detected_symptoms.forEach((s) => {
-        symptomsHTML += `<li style="margin-bottom: 6px; color: #374151;">${s.replace(/_/g, " ").charAt(0).toUpperCase() + s.replace(/_/g, " ").slice(1)}</li>`;
+    // Detected symptoms section
+    addSectionTitle("Reported / Detected Symptoms");
+    if (assessmentResults.detected_symptoms && assessmentResults.detected_symptoms.length > 0) {
+      const symptoms = assessmentResults.detected_symptoms.map((s) => {
+        const clean = s.replace(/_/g, " ");
+        return clean.charAt(0).toUpperCase() + clean.slice(1);
       });
+      addWrappedText(`The following key symptoms were identified:`);
+      symptoms.forEach((symptom) => {
+        addWrappedText(`• ${symptom}`);
+      });
+    } else {
+      addWrappedText("No distinct symptoms were automatically detected in the conversation.");
     }
 
-    let recommendationsHTML = "";
-    if (results.recommendations && results.recommendations.length > 0) {
-      results.recommendations.forEach((rec, i) => {
-        recommendationsHTML += `<li style="margin-bottom: 10px; color: #374151;">${rec}</li>`;
+    // Detailed conditions section
+    addSectionTitle("Differential Assessment");
+    if (assessmentResults.conditions && assessmentResults.conditions.length > 0) {
+      assessmentResults.conditions.forEach((condition, index) => {
+        addWrappedText(
+          `${index + 1}. ${condition.name} (${condition.match_percentage}% match${
+            condition.severity ? `, ${condition.severity} severity` : ""
+          })`
+        );
+        if (condition.description) {
+          addWrappedText(`   Summary: ${condition.description}`);
+        }
       });
+    } else {
+      addWrappedText(
+        "No specific mental health diagnoses are suggested at this time based on the available information."
+      );
     }
 
-    return `<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="UTF-8">
-  <title>MindEase AI - Assessment Report</title>
-  <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; padding: 50px; max-width: 800px; margin: 0 auto; color: #1f2937; line-height: 1.6; }
-    .header { text-align: center; margin-bottom: 40px; padding-bottom: 30px; border-bottom: 2px solid #e5e7eb; }
-    .header h1 { font-size: 32px; color: #4f46e5; margin-bottom: 8px; font-weight: 700; }
-    .header .subtitle { font-size: 18px; color: #6b7280; margin-bottom: 15px; }
-    .header .date { font-size: 14px; color: #9ca3af; }
-    .section { margin-bottom: 35px; }
-    .section h2 { font-size: 20px; color: #1f2937; margin-bottom: 15px; padding-bottom: 8px; border-bottom: 1px solid #e5e7eb; }
-    ul, ol { padding-left: 25px; }
-    .disclaimer { background: #fefce8; padding: 20px; border-radius: 8px; margin-top: 40px; border: 1px solid #fef08a; }
-    .disclaimer h3 { color: #854d0e; margin-bottom: 10px; font-size: 16px; }
-    .disclaimer p { color: #713f12; font-size: 14px; }
-    .footer { text-align: center; margin-top: 50px; padding-top: 20px; border-top: 1px solid #e5e7eb; color: #9ca3af; font-size: 12px; }
-  </style>
-</head>
-<body>
-  <div class="header">
-    <h1>MindEase AI</h1>
-    <p class="subtitle">Mental Health Assessment Report</p>
-    <p class="date">Generated on ${date} at ${time}</p>
-  </div>
-  
-  <div class="section">
-    <h2>Detected Symptoms</h2>
-    <ul>${symptomsHTML || "<li>No specific symptoms recorded</li>"}</ul>
-  </div>
-  
-  <div class="section">
-    <h2>Assessment Results</h2>
-    ${conditionsHTML || "<p style='color: #6b7280;'>No specific conditions identified based on the symptoms provided.</p>"}
-  </div>
-  
-  <div class="section">
-    <h2>Recommendations</h2>
-    <ol>${recommendationsHTML || "<li>Continue monitoring your mental health and practice self-care.</li>"}</ol>
-  </div>
-  
-  <div class="disclaimer">
-    <h3>Important Disclaimer</h3>
-    <p>This assessment is generated by AI for informational purposes only. It is NOT a medical diagnosis. Please consult with a qualified mental health professional for proper evaluation, diagnosis, and treatment. If you are experiencing a mental health crisis, please contact emergency services or a crisis helpline immediately.</p>
-  </div>
-  
-  <div class="footer">
-    <p>MindEase AI - Mental Health Assistant</p>
-    <p>This report is confidential and intended for personal use only.</p>
-  </div>
-</body>
-</html>`;
+    // Recommendations section
+    addSectionTitle("Clinical Recommendations");
+    if (assessmentResults.recommendations && assessmentResults.recommendations.length > 0) {
+      assessmentResults.recommendations.forEach((rec, index) => {
+        addWrappedText(`${index + 1}. ${rec}`);
+      });
+    } else {
+      addWrappedText(
+        "Consider maintaining a healthy routine, monitoring your mood over time, and seeking professional support if symptoms persist or worsen."
+      );
+    }
+
+    // Disclaimer section
+    addSectionTitle("Important Disclaimer");
+    addWrappedText(
+      "This document is generated by an AI system (MindEase-AI) for informational and educational purposes only. It is not a formal medical or psychiatric diagnosis. Clinical evaluation by a licensed mental health professional is essential before making any decisions about treatment or care. If you are in crisis or having thoughts of self-harm, please contact emergency services or a crisis helpline immediately."
+    );
+
+    pdf.save(`MindEase_Report_${generatedAt.toISOString().split("T")[0]}.pdf`);
   };
 
   const suggestions = [
@@ -464,6 +442,7 @@ const ChatInterface = () => {
       </div>
     );
   };
+
 
   return (
     <div className="app-wrapper">
@@ -608,15 +587,19 @@ const ChatInterface = () => {
               )}
 
               {/* Show Results Dashboard */}
-              {showResults && <ResultsDashboard />}
+              {showResults && (
+                <div id="report-content">
+                  <ResultsDashboard />
+                </div>
+              )}
 
               <div ref={messagesEndRef} />
             </div>
           )}
         </div>
 
-        {/* Assessment Button - Show after level 4-5 */}
-        {conversationLevel >= 4 && !showResults && messages.length > 1 && (
+        {/* Assessment Button - Show after 5 conversation levels */}
+        {conversationLevel >= 5 && !showResults && messages.length > 1 && (
           <div style={{
             padding: "16px 20px",
             background: "linear-gradient(180deg, rgba(139, 92, 246, 0.1) 0%, rgba(139, 92, 246, 0.15) 100%)",
